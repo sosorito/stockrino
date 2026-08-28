@@ -1,0 +1,7 @@
+import { NextResponse } from "next/server";
+import { getAllSubscribers } from "@/lib/data/newsletter";
+
+export async function GET() {
+  const subscribers = await getAllSubscribers();
+  return NextResponse.json({ subscribers });
+}

@@ -1,41 +1,51 @@
 import {
-  sqliteTable,
+  pgTable,
+  serial,
   text,
   integer,
+  boolean,
   primaryKey,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
+/**
+ * Timestamps are stored as ISO-8601 UTC strings (e.g. "2026-08-28T12:15:24.123Z")
+ * to match `new Date().toISOString()` used throughout the app, so they can be
+ * compared lexicographically (the scheduler relies on this). This Postgres
+ * expression produces exactly that format for column-level defaults.
+ */
+const isoNow = sql`to_char((now() AT TIME ZONE 'utc'), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+
 // ---------- Admin Users ----------
-export const adminUsers = sqliteTable("admin_users", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const adminUsers = pgTable("admin_users", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull().default("admin"),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at").notNull().default(isoNow),
 });
 
 // ---------- Categories ----------
-export const categories = sqliteTable("categories", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const categories = pgTable("categories", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description").default(""),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at").notNull().default(isoNow),
 });
 
 // ---------- Tags ----------
-export const tags = sqliteTable("tags", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const tags = pgTable("tags", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
 });
 
 // ---------- Media ----------
-export const media = sqliteTable("media", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const media = pgTable("media", {
+  id: serial("id").primaryKey(),
   filename: text("filename").notNull(),
   url: text("url").notNull(),
   title: text("title").default(""),
@@ -45,12 +55,12 @@ export const media = sqliteTable("media", {
   height: integer("height"),
   size: integer("size"),
   mimeType: text("mime_type"),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at").notNull().default(isoNow),
 });
 
 // ---------- Posts ----------
-export const posts = sqliteTable("posts", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const posts = pgTable("posts", {
+  id: serial("id").primaryKey(),
   title: text("title").notNull(),
   slug: text("slug").notNull().unique(),
   excerpt: text("excerpt").default(""),
@@ -65,18 +75,14 @@ export const posts = sqliteTable("posts", {
     onDelete: "set null",
   }),
   status: text("status").notNull().default("draft"), // draft | published | scheduled
-  isTrending: integer("is_trending", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  isFeatured: integer("is_featured", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  isDemo: integer("is_demo", { mode: "boolean" }).notNull().default(false),
+  isTrending: boolean("is_trending").notNull().default(false),
+  isFeatured: boolean("is_featured").notNull().default(false),
+  isDemo: boolean("is_demo").notNull().default(false),
   viewCount: integer("view_count").notNull().default(0),
   publishedAt: text("published_at"),
   scheduledAt: text("scheduled_at"),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at").notNull().default(isoNow),
+  updatedAt: text("updated_at").notNull().default(isoNow),
   // SEO
   seoTitle: text("seo_title").default(""),
   seoDescription: text("seo_description").default(""),
@@ -90,7 +96,7 @@ export const posts = sqliteTable("posts", {
 });
 
 // ---------- Post <-> Tag (many to many) ----------
-export const postTags = sqliteTable(
+export const postTags = pgTable(
   "post_tags",
   {
     postId: integer("post_id")
@@ -106,15 +112,15 @@ export const postTags = sqliteTable(
 );
 
 // ---------- Newsletter ----------
-export const newsletterSubscribers = sqliteTable("newsletter_subscribers", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const newsletterSubscribers = pgTable("newsletter_subscribers", {
+  id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
-  subscribedAt: text("subscribed_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  subscribedAt: text("subscribed_at").notNull().default(isoNow),
 });
 
 // ---------- Settings (single row) ----------
-export const settings = sqliteTable("settings", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const settings = pgTable("settings", {
+  id: serial("id").primaryKey(),
   siteName: text("site_name").notNull().default("Stockrino"),
   tagline: text("tagline")
     .notNull()

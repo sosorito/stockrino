@@ -5,6 +5,8 @@ import { db } from "@/db";
 import { posts } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+export const dynamic = "force-dynamic";
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const settings = await getSettings();
   const baseUrl = (settings.siteUrl || "http://localhost:3000").replace(/\/$/, "");

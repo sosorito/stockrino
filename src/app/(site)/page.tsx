@@ -19,7 +19,7 @@ import {
   Briefcase,
 } from "lucide-react";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 const CATEGORY_ICONS: Record<string, any> = {
   "stock-market-news": Newspaper,

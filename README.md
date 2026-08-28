@@ -3,27 +3,25 @@
 **A modern platform for USA Stock Market news, updates, analysis, and financial insights.**
 
 Stockrino is a complete, production-ready stock market news & blogging website built with
-Next.js 14, TypeScript, Tailwind CSS, and SQLite (via Drizzle ORM). It includes a full public
-website (homepage, blog, categories, search) and a secure admin panel for creating, editing,
-scheduling, and publishing content — with image uploads, a media library, SEO tools, and more.
+Next.js 14, TypeScript, Tailwind CSS, PostgreSQL (via Drizzle ORM), and Vercel Blob for
+image storage. It includes a full public website (homepage, blog, categories, search) and a
+secure admin panel for creating, editing, scheduling, and publishing content — with image
+uploads, a media library, SEO tools, and more.
+
+It is built to deploy to **Vercel's free tier** with a free serverless Postgres database
+(Neon) and a free Blob store — no server to manage. See §6.
 
 ---
 
-> **Note on `npm install`:** this project ships a `.npmrc` with `ignore-scripts=true`.
-> Both native dependencies (`better-sqlite3` for the database, `sharp` for image
-> processing) bundle prebuilt binaries for all major platforms directly in their
-> published npm packages, so no compiler toolchain or extra network access is
-> needed. This also avoids a known npm bug where a lockfile-driven `npm install`
-> can try to needlessly rebuild `better-sqlite3` from source. You do not need to
-> do anything differently — just run `npm install` as normal.
-
 ## 1. Quick Start (local development)
 
-Requirements: Node.js 18.18+ (Node 20 LTS recommended) and npm.
+Requirements: Node.js 18.18+ (Node 20 LTS recommended), npm, and a PostgreSQL database
+(a free [Neon](https://neon.tech) project works perfectly).
 
 ```bash
 npm install
-npm run db:seed     # creates the database, default categories, admin user, and demo articles
+cp .env.example .env    # then fill in DATABASE_URL (and BLOB_READ_WRITE_TOKEN for uploads)
+npm run db:seed         # creates the schema, default categories, admin user, and demo articles
 npm run dev
 ```
 
@@ -38,8 +36,8 @@ Visit:
 > Change these credentials immediately after your first login in a real deployment — see
 > "Changing the admin password" below.
 
-The database is a single SQLite file created automatically at `data/stockrino.db` the first
-time the app runs. No external database server is required to get started.
+`npm run db:seed` creates all tables (idempotent) and seeds demo content. To only create the
+tables without seeding, run `npm run db:migrate`.
 
 ---
 
@@ -83,17 +81,19 @@ src/
     admin/               Admin UI (sidebar, post form, media library, tables, ...)
     editor/               Rich text editor (Tiptap) + custom image-with-caption node
   db/
-    schema.ts           Drizzle ORM schema (SQLite)
-    migrate.ts           Idempotent table creation, runs automatically on startup
-    index.ts             Database connection singleton
+    schema.ts           Drizzle ORM schema (PostgreSQL / pg-core)
+    migrate.ts           Idempotent CREATE TABLE statements (run via db:migrate / db:seed)
+    index.ts             Drizzle + postgres-js connection singleton
   lib/
     data/                Data-access layer (posts, categories, media, settings, newsletter, users)
     auth.ts / session.ts  JWT session signing/verification, cookie session reader
 scripts/
-  seed.ts                Demo data seeder (also creates the admin user + default categories)
-public/uploads/           Uploaded images are stored here (gitignored)
-data/                     SQLite database file lives here (gitignored)
+  migrate.ts             Creates the schema in your Postgres database
+  seed.ts                Runs migrate, then seeds admin user + default categories + demo posts
 ```
+
+Uploaded images are stored in **Vercel Blob** (public store); each `media.url` is the full
+blob URL. No local `uploads/` or `data/` directory is used any more.
 
 ---
 
@@ -103,10 +103,11 @@ Copy `.env.example` to `.env` (already done for local development) and set:
 
 | Variable | Description |
 |---|---|
+| `DATABASE_URL` | **Required.** PostgreSQL connection string. On Vercel, adding a Postgres store (Neon) injects this automatically (also as `POSTGRES_URL`, which the app falls back to). |
+| `BLOB_READ_WRITE_TOKEN` | **Required for image uploads.** On Vercel, adding a Blob store injects this automatically. Without it the admin media upload returns an error; the rest of the site still works. |
 | `AUTH_SECRET` | Long random string used to sign admin session tokens. **Must** be changed for production. Generate one with `openssl rand -base64 32`. |
 | `SITE_URL` | The public URL of your deployed site, e.g. `https://stockrino.com`. Used for canonical URLs, sitemap, and Open Graph tags. You can also set this later from Admin → Settings. |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` | Only used the *first* time `npm run db:seed` runs, to create your initial admin account. |
-| `DATABASE_PATH` | Optional. Overrides where the SQLite file is stored (defaults to `data/stockrino.db`). |
 
 ---
 
@@ -116,64 +117,59 @@ There is currently no in-app "change password" screen (by design, to keep the ad
 small and secure). To change the password:
 
 1. Set `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` in `.env` to your desired new values.
-2. Delete the existing admin row from the database, or simplest: delete `data/stockrino.db`
-   and re-run `npm run db:seed` (⚠️ this also re-seeds demo content if you haven't removed it
-   — export/back up any real content first).
+2. Delete the existing `admin_users` row from the database, then re-run `npm run db:seed`
+   (it recreates only the admin user if the demo content is already present).
 
 For a production deployment, the cleanest approach is to run `npm run db:seed` once against a
 **fresh** database with your real admin credentials in `.env`, before you start publishing.
 
 ---
 
-## 6. Deploying
+## 6. Deploying to Vercel (free tier)
 
-Stockrino runs anywhere Node.js runs. Two common paths:
+1. **Push this repo to GitHub** (already done).
+2. On [vercel.com](https://vercel.com), **New Project → Import** this GitHub repo. Framework
+   is auto-detected as Next.js. Don't deploy yet — add storage first (next step), or let the
+   first build fail and redeploy after.
+3. In the project, open the **Storage** tab:
+   - **Create Database → Postgres** (Neon). Vercel links it and sets `DATABASE_URL` /
+     `POSTGRES_URL` automatically.
+   - **Create → Blob**. Vercel sets `BLOB_READ_WRITE_TOKEN` automatically.
+4. In **Settings → Environment Variables**, add:
+   - `AUTH_SECRET` — a long random string (`openssl rand -base64 32`).
+   - `SITE_URL` — your deployment URL, e.g. `https://your-project.vercel.app` (update later
+     if you add a custom domain).
+5. **Seed the database once.** Locally, put the Neon connection string in `.env` as
+   `DATABASE_URL` (copy it from the Vercel Postgres store's `.env.local` tab), then run:
+   ```bash
+   npm install
+   npm run db:seed
+   ```
+   This creates the tables and the admin user. (Alternatively run `npm run db:migrate` for
+   an empty schema and create content from scratch.)
+6. **Deploy** (Vercel → Deployments → Redeploy, or push a commit).
+7. Visit `/admin/login`, sign in with the demo credentials, and change the admin password
+   (see §5). Delete the demo posts from Admin → Blog Posts when ready.
 
-### Option A — Any Node server / VPS (simplest, matches the SQLite setup as-is)
+**Rendering:** public pages use `export const dynamic = "force-dynamic"` so they always show
+the latest content and the build never needs a live database. For a higher-traffic site you
+can switch selected pages to ISR (`export const revalidate = 60`) to cut function
+invocations.
 
-```bash
-npm install
-npm run build
-npm run db:seed   # first time only
-npm start         # runs on port 3000 by default; use a process manager like pm2
-```
+### Alternative — any Node server / VPS
 
-Put this behind a reverse proxy (nginx/Caddy) for TLS. Make sure the `data/` and
-`public/uploads/` directories are on **persistent** disk and are writable by the Node process.
-
-### Option B — Vercel / other serverless platforms
-
-Serverless platforms don't provide persistent local disk, which affects two things this app
-does by default:
-
-1. **SQLite file storage** — works fine on a traditional server, but on serverless the
-   filesystem is ephemeral/read-only in production. Swap `DATABASE_PATH` for a hosted
-   database instead. Because the data-access layer in `src/lib/data/*` is the only place
-   that talks to Drizzle, migrating to hosted Postgres means: (a) `npm install drizzle-orm pg`,
-   (b) change `src/db/index.ts` to use `drizzle-orm/node-postgres` with a `DATABASE_URL`
-   connection string, and (c) convert `src/db/schema.ts` from `sqlite-core` to `pg-core`
-   (column types map almost 1:1). `src/db/migrate.ts`'s raw `CREATE TABLE IF NOT EXISTS`
-   statements will need the equivalent Postgres syntax, or you can switch to
-   `drizzle-kit generate` + `drizzle-kit migrate` for proper migrations at that point.
-2. **Local image uploads** (`public/uploads/`, written by `src/app/api/admin/upload/route.ts`)
-   — won't persist on serverless. Point the upload route at an S3-compatible bucket (AWS S3,
-   Cloudflare R2, Supabase Storage) instead: replace the `fs.writeFile` call with an upload to
-   your bucket's SDK, and store the returned public URL in the `media` table exactly as the
-   code already does with local `/uploads/...` URLs — no other code needs to change, since
-   every consumer just renders `media.url`.
-
-If you don't want to make these changes, choose Option A — a small VPS (e.g. a $5–6/mo
-droplet/Lightsail instance) with persistent disk works great for a single-editor blog like
-this and requires zero code changes.
+`npm install && npm run build && npm start` behind nginx/Caddy for TLS. You still need a
+reachable `DATABASE_URL` (Postgres) and `BLOB_READ_WRITE_TOKEN`. The `sqlite-vps-version`
+git tag holds the older self-contained SQLite build if you'd rather run everything on one box.
 
 ---
 
 ## 7. Notes on Design Choices
 
-- **Database**: SQLite via Drizzle ORM (not Prisma) — chosen specifically so the app runs
-  immediately with zero external services or accounts. The data-access layer is fully
-  abstracted in `src/lib/data/*`, so swapping the underlying database later (see §6) doesn't
-  require touching any page or API route.
+- **Database**: PostgreSQL via Drizzle ORM + `postgres-js` (not Prisma). The data-access
+  layer is fully abstracted in `src/lib/data/*`, so pages and API routes never touch the
+  driver directly. Timestamps are stored as ISO-8601 UTC strings so the lazy scheduler can
+  compare them without date parsing.
 - **Auth**: a minimal custom JWT-in-httpOnly-cookie system (via `jose` + `bcryptjs`), not a
   third-party auth provider — there's exactly one admin role, so a full auth framework would
   be overkill. Sessions last 7 days and are verified in `src/middleware.ts` on every

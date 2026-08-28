@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllCategories, createCategory } from "@/lib/data/categories";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const categories = await getAllCategories();
   return NextResponse.json({ categories });

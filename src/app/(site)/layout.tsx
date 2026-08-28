@@ -3,6 +3,10 @@ import { getAllCategories } from "@/lib/data/categories";
 import { Header } from "@/components/site/header";
 import { Footer } from "@/components/site/footer";
 
+// Rendered per-request (reads live data from Postgres). Applies to every page
+// under (site) so a fresh database isn't required at build time.
+export const dynamic = "force-dynamic";
+
 export default async function SiteLayout({
   children,
 }: {

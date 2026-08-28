@@ -4,6 +4,10 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "react-hot-toast";
 import { getSettings } from "@/lib/data/settings";
 
+// The whole app reads live data from Postgres (settings, posts, ...), so nothing
+// is statically prerendered and the build never needs a database connection.
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSettings();
   const title = settings.seoDefaultTitle || `${settings.siteName} - USA Stock Market News & Analysis`;

@@ -1,30 +1,43 @@
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import path from "path";
-import fs from "fs";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import * as schema from "./schema";
-import { ensureSchema } from "./migrate";
 
-const dataDir = path.join(process.cwd(), "data");
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+/**
+ * Postgres connection string. On Vercel, adding a Postgres store (Neon) from the
+ * Storage tab injects these automatically. Locally, set DATABASE_URL in .env.
+ */
+const connectionString =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.POSTGRES_PRISMA_URL;
+
+if (!connectionString) {
+  throw new Error(
+    "No Postgres connection string found. Set DATABASE_URL (or POSTGRES_URL) in your environment."
+  );
 }
-
-const dbPath = process.env.DATABASE_PATH || path.join(dataDir, "stockrino.db");
 
 declare global {
   // eslint-disable-next-line no-var
-  var __stockrino_sqlite: Database.Database | undefined;
+  var __stockrino_pg: ReturnType<typeof postgres> | undefined;
 }
 
-const sqlite = global.__stockrino_sqlite || new Database(dbPath);
-sqlite.pragma("journal_mode = WAL");
-sqlite.pragma("foreign_keys = ON");
-ensureSchema(sqlite);
+/**
+ * `prepare: false` is required when going through a transaction-mode pooler
+ * (Neon / Supabase pooled connection, PgBouncer). `max: 1` keeps each
+ * serverless instance to a single connection.
+ */
+export const client =
+  global.__stockrino_pg ||
+  postgres(connectionString, {
+    max: 1,
+    prepare: false,
+    idle_timeout: 20,
+    connect_timeout: 30,
+  });
 
 if (process.env.NODE_ENV !== "production") {
-  global.__stockrino_sqlite = sqlite;
+  global.__stockrino_pg = client;
 }
 
-export const db = drizzle(sqlite, { schema });
-export { sqlite };
+export const db = drizzle(client, { schema });

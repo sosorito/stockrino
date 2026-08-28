@@ -10,7 +10,7 @@ import { formatDate } from "@/lib/utils";
 import { Calendar, Clock, User, ChevronRight, RefreshCw } from "lucide-react";
 import { readingTime } from "@/lib/utils";
 
-export const revalidate = 30;
+export const dynamic = "force-dynamic";
 
 async function getData(slug: string) {
   const post = await getPostBySlug(slug);

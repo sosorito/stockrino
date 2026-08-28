@@ -2,11 +2,15 @@
   "name": "stockrino",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18.18.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
@@ -20,8 +24,8 @@
     "@tiptap/extension-underline": "^3.30.5",
     "@tiptap/react": "^3.30.5",
     "@tiptap/starter-kit": "^3.30.5",
+    "@vercel/blob": "^0.27.3",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
@@ -29,6 +33,7 @@
     "lucide-react": "^1.35.0",
     "next": "14.2.35",
     "next-themes": "^0.4.6",
+    "postgres": "^3.4.5",
     "react": "^18",
     "react-dom": "^18",
     "react-hot-toast": "^2.6.0",
@@ -41,7 +46,6 @@
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.20",
     "@types/bcryptjs": "^2.4.6",
-    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

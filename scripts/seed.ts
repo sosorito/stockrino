@@ -1,5 +1,7 @@
 /* eslint-disable no-console */
-import { db, sqlite } from "../src/db";
+import "dotenv/config";
+import { db, client } from "../src/db";
+import { ensureSchema } from "../src/db/migrate";
 import {
   adminUsers,
   categories,
@@ -9,7 +11,7 @@ import {
   media,
   settings,
 } from "../src/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { slugify, makeExcerpt } from "../src/lib/utils";
 
@@ -216,6 +218,9 @@ const DEMO_POSTS: DemoPost[] = [
 async function main() {
   console.log("Seeding Stockrino demo data...");
 
+  // ---- Schema (idempotent) ----
+  await ensureSchema(client);
+
   // ---- Admin user ----
   const adminEmail = process.env.SEED_ADMIN_EMAIL || "admin@stockrino.com";
   const adminUsername = process.env.SEED_ADMIN_USERNAME || "admin";
@@ -287,12 +292,14 @@ async function main() {
   }
 
   // ---- Demo posts ----
-  const existingDemoCount = sqlite
-    .prepare(`SELECT COUNT(*) as c FROM posts WHERE is_demo = 1`)
-    .get() as { c: number };
+  const demoRows = await db
+    .select({ c: sql<number>`count(*)` })
+    .from(posts)
+    .where(eq(posts.isDemo, true));
+  const existingDemoCount = Number(demoRows[0]?.c || 0);
 
-  if (existingDemoCount.c > 0) {
-    console.log(`Demo posts already present (${existingDemoCount.c}), skipping post seeding.`);
+  if (existingDemoCount > 0) {
+    console.log(`Demo posts already present (${existingDemoCount}), skipping post seeding.`);
   } else {
     let i = 0;
     const now = Date.now();
@@ -405,8 +412,8 @@ async function main() {
 main()
   .catch((err) => {
     console.error(err);
-    process.exit(1);
+    process.exitCode = 1;
   })
-  .finally(() => {
-    sqlite.close();
+  .finally(async () => {
+    await client.end();
   });

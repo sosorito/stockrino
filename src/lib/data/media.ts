@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { media } from "@/db/schema";
-import { desc, eq, like, or } from "drizzle-orm";
+import { desc, eq, ilike, or } from "drizzle-orm";
 
 export async function getAllMedia(search?: string) {
   if (search) {
@@ -8,7 +8,7 @@ export async function getAllMedia(search?: string) {
     return db
       .select()
       .from(media)
-      .where(or(like(media.title, term), like(media.filename, term), like(media.altText, term)))
+      .where(or(ilike(media.title, term), ilike(media.filename, term), ilike(media.altText, term)))
       .orderBy(desc(media.createdAt));
   }
   return db.select().from(media).orderBy(desc(media.createdAt));

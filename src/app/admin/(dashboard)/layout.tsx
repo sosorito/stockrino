@@ -1,6 +1,9 @@
 import { getSession } from "@/lib/session";
 import { AdminSidebar } from "@/components/admin/sidebar";
 
+// Admin is always per-request (auth + live data); never prerendered.
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Admin Panel",
   robots: { index: false, follow: false },

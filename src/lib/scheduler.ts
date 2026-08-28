@@ -1,19 +1,20 @@
-import { sqlite } from "@/db";
+import { sql } from "drizzle-orm";
+import { db } from "@/db";
 
 /**
  * Lazily promotes any "scheduled" posts whose scheduled time has passed
  * into "published". Called at the top of every public-facing read so the
  * site stays correct without needing an external cron process.
  */
-export function syncScheduledPosts() {
+export async function syncScheduledPosts() {
   const now = new Date().toISOString();
-  sqlite
-    .prepare(
-      `UPDATE posts
+  await db.execute(sql`
+    UPDATE posts
        SET status = 'published',
-           published_at = COALESCE(published_at, scheduled_at, ?),
-           updated_at = ?
-       WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= ?`
-    )
-    .run(now, now, now);
+           published_at = COALESCE(published_at, scheduled_at, ${now}),
+           updated_at = ${now}
+     WHERE status = 'scheduled'
+       AND scheduled_at IS NOT NULL
+       AND scheduled_at <= ${now}
+  `);
 }

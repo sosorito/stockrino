@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import path from "path";
-import fs from "fs/promises";
 import sharp from "sharp";
+import { put } from "@vercel/blob";
 import { createMedia } from "@/lib/data/media";
 import { slugify } from "@/lib/utils";
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 const MAX_WIDTH = 1920;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/svg+xml"];
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return NextResponse.json(
+        { error: "Image storage is not configured (missing BLOB_READ_WRITE_TOKEN)." },
+        { status: 500 }
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const altText = String(formData.get("altText") || "");
@@ -32,8 +38,6 @@ export async function POST(req: NextRequest) {
     if (file.size > 10 * 1024 * 1024) {
       return NextResponse.json({ error: "File is too large (max 10MB)." }, { status: 400 });
     }
-
-    await fs.mkdir(UPLOAD_DIR, { recursive: true });
 
     const arrayBuffer = await file.arrayBuffer();
     let buffer = Buffer.from(arrayBuffer);
@@ -78,14 +82,16 @@ export async function POST(req: NextRequest) {
     }
 
     const filename = `${baseName}-${id}${ext}`;
-    const filePath = path.join(UPLOAD_DIR, filename);
-    await fs.writeFile(filePath, buffer);
 
-    const url = `/uploads/${filename}`;
+    const blob = await put(`uploads/${filename}`, buffer, {
+      access: "public",
+      contentType: mimeType,
+      addRandomSuffix: true,
+    });
 
     const media = await createMedia({
       filename,
-      url,
+      url: blob.url,
       title: title || file.name,
       altText: altText || title || file.name,
       caption,

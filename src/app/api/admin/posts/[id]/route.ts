@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPostById, updatePost, deletePost } from "@/lib/data/posts";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -1,16 +1,16 @@
-import { db, sqlite } from "@/db";
+import { db } from "@/db";
 import { categories, posts } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { slugify } from "@/lib/utils";
 
 export async function getAllCategories() {
   const rows = await db.select().from(categories).orderBy(categories.name);
-  const counts = sqlite
-    .prepare(
-      `SELECT category_id as id, COUNT(*) as count FROM posts WHERE status = 'published' GROUP BY category_id`
-    )
-    .all() as { id: number; count: number }[];
-  const countMap = new Map(counts.map((c) => [c.id, c.count]));
+  const counts = await db
+    .select({ id: posts.categoryId, count: sql<number>`count(*)` })
+    .from(posts)
+    .where(eq(posts.status, "published"))
+    .groupBy(posts.categoryId);
+  const countMap = new Map(counts.map((c) => [c.id, Number(c.count) || 0]));
   return rows.map((c) => ({ ...c, postCount: countMap.get(c.id) || 0 }));
 }
 

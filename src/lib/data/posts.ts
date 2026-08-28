@@ -1,6 +1,6 @@
-import { db, sqlite } from "@/db";
-import { posts, postTags, tags, categories } from "@/db/schema";
-import { and, desc, asc, eq, like, or, sql, ne } from "drizzle-orm";
+import { db } from "@/db";
+import { posts, postTags, tags, categories, newsletterSubscribers } from "@/db/schema";
+import { and, desc, asc, eq, ilike, or, sql, ne } from "drizzle-orm";
 import { syncScheduledPosts } from "@/lib/scheduler";
 import { slugify, makeExcerpt } from "@/lib/utils";
 
@@ -34,7 +34,7 @@ export interface ListOptions {
 }
 
 export async function getPublishedPosts(opts: ListOptions = {}) {
-  syncScheduledPosts();
+  await syncScheduledPosts();
   const page = opts.page && opts.page > 0 ? opts.page : 1;
   const limit = opts.limit || 9;
   const offset = (page - 1) * limit;
@@ -56,9 +56,9 @@ export async function getPublishedPosts(opts: ListOptions = {}) {
     const term = `%${opts.search}%`;
     conditions.push(
       or(
-        like(posts.title, term),
-        like(posts.excerpt, term),
-        like(posts.content, term)
+        ilike(posts.title, term),
+        ilike(posts.excerpt, term),
+        ilike(posts.content, term)
       )!
     );
   }
@@ -91,7 +91,7 @@ export async function getPublishedPosts(opts: ListOptions = {}) {
 }
 
 export async function getPostBySlug(slug: string, includeUnpublished = false) {
-  syncScheduledPosts();
+  await syncScheduledPosts();
   const where = includeUnpublished
     ? eq(posts.slug, slug)
     : and(eq(posts.slug, slug), eq(posts.status, "published"));
@@ -103,13 +103,14 @@ export async function getPostBySlug(slug: string, includeUnpublished = false) {
 }
 
 export async function incrementViewCount(id: number) {
-  sqlite
-    .prepare(`UPDATE posts SET view_count = view_count + 1 WHERE id = ?`)
-    .run(id);
+  await db
+    .update(posts)
+    .set({ viewCount: sql`${posts.viewCount} + 1` })
+    .where(eq(posts.id, id));
 }
 
 export async function getTrendingPosts(limit = 5) {
-  syncScheduledPosts();
+  await syncScheduledPosts();
   const rows = await db.query.posts.findMany({
     where: and(eq(posts.status, "published"), eq(posts.isTrending, true)),
     with: postWith,
@@ -128,7 +129,7 @@ export async function getTrendingPosts(limit = 5) {
 }
 
 export async function getFeaturedPosts(limit = 3) {
-  syncScheduledPosts();
+  await syncScheduledPosts();
   const rows = await db.query.posts.findMany({
     where: and(eq(posts.status, "published"), eq(posts.isFeatured, true)),
     with: postWith,
@@ -146,7 +147,7 @@ export async function getFeaturedPosts(limit = 3) {
 }
 
 export async function getLatestPosts(limit = 9) {
-  syncScheduledPosts();
+  await syncScheduledPosts();
   const rows = await db.query.posts.findMany({
     where: eq(posts.status, "published"),
     with: postWith,
@@ -161,7 +162,7 @@ export async function getRelatedPosts(
   categoryId: number | null,
   limit = 3
 ) {
-  syncScheduledPosts();
+  await syncScheduledPosts();
   const conditions = [eq(posts.status, "published"), ne(posts.id, postId)];
   if (categoryId) conditions.push(eq(posts.categoryId, categoryId));
   const rows = await db.query.posts.findMany({
@@ -209,7 +210,7 @@ export async function getAllPostsAdmin(opts: AdminListOptions = {}) {
   }
   if (opts.search) {
     const term = `%${opts.search}%`;
-    conditions.push(or(like(posts.title, term), like(posts.excerpt, term))!);
+    conditions.push(or(ilike(posts.title, term), ilike(posts.excerpt, term))!);
   }
   const where = conditions.length ? and(...conditions) : undefined;
 
@@ -443,12 +444,22 @@ export async function duplicatePost(id: number) {
 }
 
 export async function getDashboardStats() {
-  syncScheduledPosts();
-  const all = sqlite
-    .prepare(
-      `SELECT status, COUNT(*) as count FROM posts GROUP BY status`
-    )
-    .all() as { status: string; count: number }[];
+  await syncScheduledPosts();
+
+  const [statusRows, categoryRows, subscriberRows, recentPosts] =
+    await Promise.all([
+      db
+        .select({ status: posts.status, count: sql<number>`count(*)` })
+        .from(posts)
+        .groupBy(posts.status),
+      db.select({ count: sql<number>`count(*)` }).from(categories),
+      db.select({ count: sql<number>`count(*)` }).from(newsletterSubscribers),
+      db.query.posts.findMany({
+        with: postWith,
+        orderBy: [desc(posts.updatedAt)],
+        limit: 6,
+      }),
+    ]);
 
   const counts: Record<string, number> = {
     draft: 0,
@@ -456,47 +467,34 @@ export async function getDashboardStats() {
     scheduled: 0,
   };
   let total = 0;
-  for (const row of all) {
-    counts[row.status] = row.count;
-    total += row.count;
+  for (const row of statusRows) {
+    const c = Number(row.count) || 0;
+    counts[row.status] = c;
+    total += c;
   }
-
-  const categoryCount = sqlite
-    .prepare(`SELECT COUNT(*) as c FROM categories`)
-    .get() as { c: number };
-
-  const subscriberCount = sqlite
-    .prepare(`SELECT COUNT(*) as c FROM newsletter_subscribers`)
-    .get() as { c: number };
-
-  const recentPosts = await db.query.posts.findMany({
-    with: postWith,
-    orderBy: [desc(posts.updatedAt)],
-    limit: 6,
-  });
 
   return {
     total,
     published: counts.published,
     draft: counts.draft,
     scheduled: counts.scheduled,
-    categories: categoryCount.c,
-    subscribers: subscriberCount.c,
+    categories: Number(categoryRows[0]?.count || 0),
+    subscribers: Number(subscriberRows[0]?.count || 0),
     recentPosts: recentPosts.map(shapePost),
   };
 }
 
 export async function searchPosts(query: string, limit = 20) {
-  syncScheduledPosts();
+  await syncScheduledPosts();
   const term = `%${query}%`;
   const rows = await db.query.posts.findMany({
     where: and(
       eq(posts.status, "published"),
       or(
-        like(posts.title, term),
-        like(posts.excerpt, term),
-        like(posts.content, term),
-        like(posts.seoKeywords, term)
+        ilike(posts.title, term),
+        ilike(posts.excerpt, term),
+        ilike(posts.content, term),
+        ilike(posts.seoKeywords, term)
       )
     ),
     with: postWith,

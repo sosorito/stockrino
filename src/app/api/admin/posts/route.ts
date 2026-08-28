@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPost, getAllPostsAdmin } from "@/lib/data/posts";
 import { getSession } from "@/lib/session";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const result = await getAllPostsAdmin({

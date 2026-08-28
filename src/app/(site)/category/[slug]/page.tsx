@@ -7,7 +7,7 @@ import { BlogFilters } from "@/components/site/blog-filters";
 import { Pagination } from "@/components/site/pagination";
 import { getSettings } from "@/lib/data/settings";
 
-export const revalidate = 30;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,

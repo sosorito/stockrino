@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { del } from "@vercel/blob";
 import { updateMedia, deleteMedia, getMediaById } from "@/lib/data/media";
-import fs from "fs/promises";
-import path from "path";
 
 export async function PATCH(
   req: NextRequest,
@@ -23,9 +22,9 @@ export async function DELETE(
 ) {
   const { id } = await params;
   const media = await getMediaById(Number(id));
-  if (media) {
-    const filePath = path.join(process.cwd(), "public", media.url);
-    fs.unlink(filePath).catch(() => {});
+  if (media && media.url.includes(".public.blob.vercel-storage.com")) {
+    // best-effort: remove the underlying file from Blob storage
+    await del(media.url).catch(() => {});
   }
   await deleteMedia(Number(id));
   return NextResponse.json({ ok: true });
